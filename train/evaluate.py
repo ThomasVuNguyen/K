@@ -32,107 +32,8 @@ def load_config():
     with open('config.json', 'r') as f:
         return json.load(f)
 
-# Test objects to evaluate - comprehensive list of 200+ objects
-TEST_OBJECTS = [
-    # Basic shapes
-    "cube", "sphere", "cylinder", "cone", "pyramid", "torus", "tetrahedron", "octahedron",
-    # Polygonal shapes
-    "pentagon", "hexagon", "heptagon", "octagon", "nonagon", "decagon", "dodecagon",
-    # Prisms
-    "triangular prism", "square prism", "pentagonal prism", "hexagonal prism", "rectangular prism",
-    # Boxes and variations
-    "box", "tall box", "wide box", "thin box", "box with rounded corners", "hollow box", "box with holes",
-    # Cylinders and variations
-    "tall cylinder", "short cylinder", "thick cylinder", "thin cylinder", "cone", "frustum",
-    # Stars and polygons
-    "star", "6-pointed star", "8-pointed star", "five-pointed star", "crescent", "donut",
-    # Complex geometric shapes
-    "cube with hole", "sphere with hole", "cube with spheres", "interlocking cubes", "sierpinski pyramid",
-    # Decorative shapes
-    "flower", "flower with petals", "gear", "spiral", "helix", "wave", "ripple",
-    # Functional shapes
-    "bracket", "clamp", "hinge", "hook", "ring", "washer", "bushing", "spacer",
-    # Letters and text
-    "letter A", "letter B", "letter O", "letter S", "letter T", "number 0", "number 1", "number 8",
-    # Animals (simplified)
-    "cube with eyes", "pyramid with face", "sphere head", "cylinder body", "bird shape", "fish",
-    # Architecture
-    "arch", "dome", "cube tower", "pyramid tower", "wall block", "brick", "corner piece",
-    # Organic shapes
-    "blob", "random shape", "organic form", "bumpy sphere", "wrinkled cube", "twisted cylinder",
-    # Mechanical parts
-    "bolt", "screw", "nut", "spring", "pulley", "wheel", "axle", "shaft",
-    # Industrial shapes
-    "pipe", "tube", "channel", "profile", "angle iron", "T-beam", "I-beam", "L-profile",
-    # Containers
-    "box without lid", "container with lid", "open box", "closed box", "cup", "bowl", "vase",
-    # Grilles and lattices
-    "grid", "mesh", "lattice", "honeycomb", "woven pattern", "cross pattern", "diamond pattern",
-    # Spirals and curves
-    "spiral staircase", "helix curve", "bezier curve", "wavy surface", "undulating shape",
-    # Multiple components
-    "two cubes", "cube and sphere", "stack of cylinders", "pyramid with base", "interlocking rings",
-    # Mathematical shapes
-    "torus knot", "klein bottle", "mobius strip", "trefoil knot", "figure eight", "lissajous curve",
-    # Fractals
-    "fractal tree", "fractal branch", "mandelbrot shape", "sierpinski triangle", "julia set",
-    # Platonic solids
-    "tetrahedron", "cube", "octahedron", "dodecahedron", "icosahedron",
-    # Archimedean solids
-    "truncated tetrahedron", "cuboctahedron", "truncated cube", "truncated octahedron",
-    # Symmetrical patterns
-    "symmetrical star", "radial pattern", "concentric rings", "radial lines", "symmetric flower",
-    # Household items
-    "mug", "cup", "fork", "spoon", "knife", "plate", "bowl", "glass", "bottle",
-    # Tools
-    "hammer", "wrench", "screwdriver", "pliers", "saw", "drill", "level",
-    # Sports equipment
-    "ball", "dice", "pyramid stack", "cone target", "ring target",
-    # Puzzle pieces
-    "puzzle piece", "interlocking piece", "puzzle connector", "puzzle cube",
-    # Nature inspired
-    "leaf", "tree", "branch", "coral", "shell", "nautilus", "snowflake", "crystal",
-    # Abstract shapes
-    "wave packet", "interference pattern", "checkerboard", "striped pattern", "gradient shape",
-    # Geometric variations
-    "chamfered cube", "rounded cube", "beveled cube", "sliced cube", "rotated cube",
-    # Symmetry examples
-    "bilateral symmetry", "radial symmetry", "rotational symmetry", "mirror symmetry",
-    # Size variations
-    "tiny cube", "small cube", "medium cube", "large cube", "huge cube", "giant cube",
-    # Thickness variations
-    "thick wall", "thin wall", "medium wall", "shell", "solid", "hollow",
-    # Combination shapes
-    "cube with pyramid", "sphere with cube", "cylinder with cone", "torus with sphere",
-    # Boolean operations
-    "union shape", "difference shape", "intersection shape", "cut shape",
-    # Negative space
-    "shape with cavity", "shape with indent", "hollowed out", "with negative space",
-    # Layers
-    "layered cube", "stacked spheres", "nested boxes", "concentric spheres", "layered rings",
-    # Rotations
-    "rotated square", "twisted shape", "spiral shape", "helical shape", "rotating pattern",
-    # Scaling
-    "scaled sphere", "scaled cylinder", "stretched cube", "compressed pyramid", "elongated shape",
-    # Distortions
-    "distorted cube", "warped sphere", "bent cylinder", "twisted torus", "skewed shape",
-    # Special effects
-    "glowing sphere", "light source", "shadow maker", "reflection", "transparent shape",
-    # Tessellations
-    "triangular tessellation", "square tessellation", "hexagonal tessellation", "complex tessellation",
-    # Borders and frames
-    "bordered cube", "framed shape", "outlined sphere", "hollow outline", "frame structure",
-    # Connectors
-    "connector piece", "joint", "socket", "plug", "coupling", "adapter", "bracket",
-    # Mounting
-    "mounting base", "mounting bracket", "attachment point", "pivot mount", "swivel mount",
-    # Arrays and grids
-    "cube array", "sphere array", "cylinder array", "mixed array", "irregular array",
-    # Transformations
-    "transformed cube", "matrix transformation", "composite shape", "hybrid shape",
-    # Modular components
-    "module", "unit cell", "repeating unit", "building block", "constructor piece",
-]
+# Test objects will be loaded from config.json
+TEST_OBJECTS = []
 
 # =============================================================================
 # MODEL SETUP
@@ -600,7 +501,7 @@ def judge_image_similarity(image_path, object_name):
         return False, f"VLM API error: {str(e)}"
 
 def process_object_parallel(args):
-    """Process a single object: generate, render, and judge (for parallel execution)"""
+    """Process a single object: generate and render (for parallel execution)"""
     model_path, object_name, llama_cli_path, evaluation_dir, index = args
     
     print(f"  🎯 Processing: {object_name}")
@@ -613,12 +514,10 @@ def process_object_parallel(args):
             'object': object_name,
             'code_extracted': False,
             'render_success': False,
-            'visual_similarity': False,
             'tokens_generated': 0,
             'code': None,
             'inference_error': inference_error,
             'render_error': None,
-            'vlm_response': None,
         }
     
     # Extract code
@@ -626,9 +525,7 @@ def process_object_parallel(args):
     code_extracted = scad_code is not None and len(scad_code.strip()) > 0
     
     render_success = False
-    visual_similarity = False
     render_error = None
-    vlm_response = None
     
     if code_extracted:
         print(f"    ✓ OpenSCAD code extracted ({len(scad_code)} chars, ~{tokens_generated} tokens)")
@@ -637,19 +534,7 @@ def process_object_parallel(args):
         render_success, render_error = render_openscad(scad_code, object_name, evaluation_dir)
         
         if render_success:
-            # Judge visual similarity
-            safe_name = re.sub(r'[^\w\-_]', '_', object_name)
-            png_file = os.path.join(evaluation_dir, f"{safe_name}.png")
-            
-            if os.path.exists(png_file):
-                print(f"    🔍 Judging visual similarity...")
-                visual_similarity, vlm_response = judge_image_similarity(png_file, object_name)
-                if visual_similarity:
-                    print(f"    ✓ VLM says: YES, resembles {object_name}")
-                else:
-                    print(f"    ✗ VLM says: NO, does not resemble {object_name}")
-            else:
-                vlm_response = "PNG file not found for judging"
+            print(f"    ✓ Render successful")
         else:
             print(f"    ✗ Render failed: {render_error}")
     else:
@@ -660,12 +545,10 @@ def process_object_parallel(args):
         'object': object_name,
         'code_extracted': code_extracted,
         'render_success': render_success,
-        'visual_similarity': visual_similarity,
         'tokens_generated': tokens_generated,
         'code': scad_code,
         'inference_error': inference_error,
         'render_error': render_error,
-        'vlm_response': vlm_response,
     }
 
 # =============================================================================
@@ -682,11 +565,22 @@ def evaluate_model(config):
     model_path = download_gguf_model(config)
     llama_cli_path = get_llama_cli_path()
     model_name = config['model_config']['hub_model_name']
+    
+    # Load test objects from config
+    test_objects = config.get('dataset_config', {}).get('test_objects', [])
+    
+    if not test_objects:
+        print("❌ Error: No test_objects found in config.json under dataset_config")
+        print("   Please add test_objects to your config.json, e.g.:")
+        print('   "dataset_config": {')
+        print('     "test_objects": ["cat", "car", "tree"]')
+        print('   }')
+        exit(1)
 
     print(f"\n📋 Test Configuration:")
     print(f"   Model: {model_name}")
-    print(f"   Objects to test: {len(TEST_OBJECTS)}")
-    print(f"   Objects: {', '.join(TEST_OBJECTS)}")
+    print(f"   Objects to test: {len(test_objects)}")
+    print(f"   Objects: {', '.join(test_objects)}")
     print()
 
     # Create evaluation directory and results file
@@ -705,7 +599,6 @@ def evaluate_model(config):
         total = len(results)
         code_success = sum(1 for r in results if r['code_extracted'])
         render_success = sum(1 for r in results if r['render_success'])
-        visual_success = sum(1 for r in results if r['visual_similarity'])
         avg_tokens = sum(r['tokens_generated'] for r in results) / total if total > 0 else 0
 
         with open(results_file, 'w') as f:
@@ -714,14 +607,12 @@ def evaluate_model(config):
                 'timestamp': timestamp.isoformat(),
                 'date': timestamp.strftime('%Y-%m-%d'),
                 'time': timestamp.strftime('%H:%M:%S'),
-                'total_tests': len(TEST_OBJECTS),
+                'total_tests': len(test_objects),
                 'completed_tests': total,
                 'code_extraction_success': code_success,
                 'code_extraction_rate': f"{code_success/total*100:.1f}%" if total > 0 else "0%",
                 'render_success': render_success,
                 'render_success_rate': f"{render_success/total*100:.1f}%" if total > 0 else "0%",
-                'visual_similarity_success': visual_success,
-                'visual_similarity_rate': f"{visual_success/total*100:.1f}%" if total > 0 else "0%",
                 'average_tokens_generated': f"{avg_tokens:.0f}",
                 'results': results
             }, f, indent=2)
@@ -731,16 +622,15 @@ def evaluate_model(config):
     print(f"📁 Evaluation run folder: {evaluation_dir}/")
     print(f"📝 Results will be saved to: {results_file}")
     print(f"🖼️  Rendered images will be saved to: {evaluation_dir}/")
-    print(f"🔍 VLM judging with {OLLAMA_MODEL}")
     print(f"⚡ Parallel processing with {MAX_WORKERS} workers")
 
     # Prepare arguments for parallel processing
     process_args = [
         (model_path, obj, llama_cli_path, evaluation_dir, i)
-        for i, obj in enumerate(TEST_OBJECTS, 1)
+        for i, obj in enumerate(test_objects, 1)
     ]
 
-    print(f"\n🚀 Starting parallel processing of {len(TEST_OBJECTS)} objects...")
+    print(f"\n🚀 Starting parallel processing of {len(test_objects)} objects...")
     print("-" * 60)
 
     # Process objects in parallel
@@ -763,12 +653,9 @@ def evaluate_model(config):
                 save_results()
                 
                 # Print progress
-                print(f"\n[{len(results)}/{len(TEST_OBJECTS)}] Completed: {result['object']}")
+                print(f"\n[{len(results)}/{len(test_objects)}] Completed: {result['object']}")
                 print(f"  Code: {'✓' if result['code_extracted'] else '✗'}")
                 print(f"  Render: {'✓' if result['render_success'] else '✗'}")
-                print(f"  Visual: {'✓' if result['visual_similarity'] else '✗'}")
-                if result['vlm_response']:
-                    print(f"  VLM: {result['vlm_response'][:100]}...")
                 
             except Exception as e:
                 print(f"\n[{index}] Error processing: {e}")
@@ -777,12 +664,10 @@ def evaluate_model(config):
                     'object': f"object_{index}",
                     'code_extracted': False,
                     'render_success': False,
-                    'visual_similarity': False,
                     'tokens_generated': 0,
                     'code': None,
                     'inference_error': str(e),
                     'render_error': None,
-                    'vlm_response': None,
                 })
                 save_results()
     
@@ -793,22 +678,19 @@ def evaluate_model(config):
 
     code_success = sum(1 for r in results if r['code_extracted'])
     render_success = sum(1 for r in results if r['render_success'])
-    visual_success = sum(1 for r in results if r['visual_similarity'])
     total = len(results)
     avg_tokens = sum(r['tokens_generated'] for r in results) / total if total > 0 else 0
 
     print(f"\n✨ Code Extraction Success Rate: {code_success}/{total} ({code_success/total*100:.1f}%)")
     print(f"🎨 Render Success Rate: {render_success}/{total} ({render_success/total*100:.1f}%)")
-    print(f"👁️  Visual Similarity Success Rate: {visual_success}/{total} ({visual_success/total*100:.1f}%)")
-    print(f"📝 Average Tokens Generated: {avg_tokens:.0f}")
+    print(f" Average Tokens Generated: {avg_tokens:.0f}")
 
-    print(f"\n{'Object':<30} {'Code':<6} {'Render':<8} {'Visual':<8} {'Tokens':<8}")
+    print(f"\n{'Object':<30} {'Code':<6} {'Render':<8} {'Tokens':<8}")
     print("-" * 60)
     for r in results:
         code_status = "✓" if r['code_extracted'] else "✗"
         render_status = "✓" if r['render_success'] else "✗"
-        visual_status = "✓" if r['visual_similarity'] else "✗"
-        print(f"{r['object']:<30} {code_status:<6} {render_status:<8} {visual_status:<8} {r['tokens_generated']:<8}")
+        print(f"{r['object']:<30} {code_status:<6} {render_status:<8} {r['tokens_generated']:<8}")
 
     print(f"\n💾 Final results saved to: {results_file}")
     print(f"🖼️  All rendered images saved to: {evaluation_dir}/")
