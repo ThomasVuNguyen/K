@@ -8,9 +8,13 @@
     "full_finetuning": false
   },
   "dataset_config": {
-    "dataset_name": "ThomasTheMaker/Synthetic-Object-v0",
-    "dataset_split": "train",
-    "chat_template": "gemma3"
+    "datasets": [
+      {
+        "name": "ThomasTheMaker/Synthetic-Object-v0"
+      }
+    ],
+    "chat_template": "gemma3",
+    "test_objects": ["cat", "car", "tree"]
   },
   "lora_config": {
     "r": 32,

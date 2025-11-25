@@ -221,20 +221,9 @@ def main():
     print(f"GGUF repository: {gguf_repo_name}")
     
     # Quantization types to convert
-    # Customize this list based on your needs (more types = longer conversion time)
+    # Only exporting Q8_0 (8-bit quantization, high quality)
     quantization_types = [
-        # Full precision formats
-        "F16",      # Full 16-bit precision (recommended baseline)
-        # "F32",    # Full 32-bit precision (very large, uncomment if needed)
-        # "BF16",   # Brain Float 16-bit precision (uncomment if needed)
-        
-        # Quantized formats (K-quants are modern, high-quality methods)
         "Q8_0",     # 8-bit quantization (high quality)
-        "Q6_K",     # 6-bit K-quant (near-lossless, good for high quality)
-        "Q5_K_M",   # 5-bit K-quant medium (excellent quality/size balance)
-        "Q4_K_M",   # 4-bit K-quant medium (most popular, good quality, smaller size)
-        "Q3_K_M",   # 3-bit K-quant medium (very small, still decent quality)
-        # "Q2_K",   # 2-bit K-quant (smallest, lower quality, uncomment if needed)
     ]
     
     # Create gguf directory

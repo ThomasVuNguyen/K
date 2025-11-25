@@ -35,9 +35,25 @@ LOAD_IN_8BIT = model_config['load_in_8bit']
 FULL_FINETUNING = model_config['full_finetuning']
 
 # Dataset Configuration
-DATASET_NAME = dataset_config['dataset_name']
-DATASET_SPLIT = dataset_config['dataset_split']
 CHAT_TEMPLATE = dataset_config['chat_template']
+DEFAULT_DATASET_SPLIT = dataset_config.get('dataset_split', 'train')
+RAW_DATASET_SPECS = dataset_config.get('datasets')
+TEST_OBJECTS = dataset_config.get('test_objects', [])
+
+def normalize_dataset_spec(spec):
+    dataset_name = spec.get('name') or spec.get('dataset_name')
+    if not dataset_name:
+        raise ValueError("Each dataset entry must define a 'name'.")
+    dataset_split = spec.get('split') or spec.get('dataset_split') or DEFAULT_DATASET_SPLIT
+    return {"name": dataset_name, "split": dataset_split}
+
+if RAW_DATASET_SPECS:
+    DATASET_SPECS = [normalize_dataset_spec(spec) for spec in RAW_DATASET_SPECS]
+else:
+    dataset_name = dataset_config.get('dataset_name')
+    if not dataset_name:
+        raise ValueError("dataset_config must include either 'datasets' or 'dataset_name'.")
+    DATASET_SPECS = [{"name": dataset_name, "split": DEFAULT_DATASET_SPLIT}]
 
 # LoRA Configuration
 '''  Rank to Percentage Table:
@@ -239,13 +255,26 @@ tokenizer = get_chat_template(
     chat_template=CHAT_TEMPLATE,
 )
 
-from datasets import load_dataset
-dataset = load_dataset(DATASET_NAME, split=DATASET_SPLIT)
+from datasets import load_dataset, concatenate_datasets
 
-# Split dataset into train/validation (95/5 split)
-dataset = dataset.train_test_split(test_size=0.05, seed=SEED)
-train_dataset = dataset['train']
-eval_dataset = dataset['test']
+train_splits = []
+eval_splits = []
+for spec in DATASET_SPECS:
+    current_dataset = load_dataset(spec["name"], split=spec["split"])
+    split_dataset = current_dataset.train_test_split(test_size=0.05, seed=SEED)
+    train_splits.append(split_dataset['train'])
+    eval_splits.append(split_dataset['test'])
+    print(
+        f"Loaded dataset '{spec['name']}' ({spec['split']}) -> "
+        f"train: {len(split_dataset['train'])}, val: {len(split_dataset['test'])}"
+    )
+
+if not train_splits or not eval_splits:
+    raise RuntimeError("No datasets were loaded. Please check dataset_config.")
+
+train_dataset = concatenate_datasets(train_splits) if len(train_splits) > 1 else train_splits[0]
+eval_dataset = concatenate_datasets(eval_splits) if len(eval_splits) > 1 else eval_splits[0]
+
 print(f"Training samples: {len(train_dataset)}, Validation samples: {len(eval_dataset)}")
 
 """We now use `convert_to_chatml` to convert the reformatted dataset (with input/output/system columns) to the correct format for finetuning purposes!"""
@@ -487,35 +516,47 @@ if os.path.exists(CSV_LOG_FILE):
 Let's run the model via Unsloth native inference! According to the `Gemma-3` team, the recommended settings for inference are `temperature = 1.0, top_p = 0.95, top_k = 64`
 """
 
-messages = [
-    {"role" : 'user', 'content' : train_dataset['conversations'][10][0]['content']}
-]
-text = tokenizer.apply_chat_template(
-    messages,
-    tokenize = False,
-    add_generation_prompt = True, # Must add for generation
-).removeprefix('<bos>')
+def build_test_prompt(object_name):
+    return f"hey cadmonkey, create me a {object_name}".strip()
 
-from transformers import TextStreamer
-# Fix cache compatibility issue by using a different generation approach
-inputs = tokenizer(text, return_tensors = "pt").to("cuda")
-outputs = model.generate(
-    input_ids=inputs["input_ids"],
-    attention_mask=inputs["attention_mask"],
-    max_new_tokens=MAX_NEW_TOKENS,
-    temperature=TEMPERATURE,
-    top_p=TOP_P,
-    top_k=TOP_K,
-    do_sample=DO_SAMPLE,
-    repetition_penalty=1.1,  # Reduce repetition in generated text
-    pad_token_id=tokenizer.eos_token_id,
-    use_cache=False,  # Disable cache to avoid compatibility issues
-)
+def generate_response(prompt_text):
+    messages = [{"role": 'user', 'content': prompt_text}]
+    text = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True,
+    ).removeprefix('<bos>')
 
-# Decode and print the generated text
-generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-print("Generated response:")
-print(generated_text)
+    inputs = tokenizer(text, return_tensors = "pt").to("cuda")
+    outputs = model.generate(
+        input_ids=inputs["input_ids"],
+        attention_mask=inputs["attention_mask"],
+        max_new_tokens=MAX_NEW_TOKENS,
+        temperature=TEMPERATURE,
+        top_p=TOP_P,
+        top_k=TOP_K,
+        do_sample=DO_SAMPLE,
+        repetition_penalty=1.1,  # Reduce repetition in generated text
+        pad_token_id=tokenizer.eos_token_id,
+        use_cache=False,  # Disable cache to avoid compatibility issues
+    )
+
+    return tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+if TEST_OBJECTS:
+    inference_prompts = [build_test_prompt(obj) for obj in TEST_OBJECTS]
+else:
+    try:
+        fallback_prompt = train_dataset['conversations'][10][0]['content']
+    except Exception:
+        fallback_prompt = train_dataset['conversations'][0][0]['content']
+    inference_prompts = [fallback_prompt]
+
+for prompt in inference_prompts:
+    print("\n" + "=" * 50)
+    print(f"Prompt: {prompt}")
+    print("Generated response:")
+    print(generate_response(prompt))
 
 """<a name="Save"></a>
 ### Saving, loading finetuned models
