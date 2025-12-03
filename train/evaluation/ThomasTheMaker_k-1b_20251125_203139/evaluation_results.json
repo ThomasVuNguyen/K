@@ -1,0 +1,42 @@
+{
+  "model_name": "ThomasTheMaker/k-1b",
+  "timestamp": "2025-11-25T20:31:39.996126",
+  "date": "2025-11-25",
+  "time": "20:31:39",
+  "total_tests": 3,
+  "completed_tests": 3,
+  "code_extraction_success": 0,
+  "code_extraction_rate": "0.0%",
+  "render_success": 0,
+  "render_success_rate": "0.0%",
+  "average_tokens_generated": "0",
+  "results": [
+    {
+      "object": "cat",
+      "code_extracted": false,
+      "render_success": false,
+      "tokens_generated": 0,
+      "code": null,
+      "inference_error": "Timeout (>300s) generating response",
+      "render_error": null
+    },
+    {
+      "object": "car",
+      "code_extracted": false,
+      "render_success": false,
+      "tokens_generated": 0,
+      "code": null,
+      "inference_error": "Timeout (>300s) generating response",
+      "render_error": null
+    },
+    {
+      "object": "tree",
+      "code_extracted": false,
+      "render_success": false,
+      "tokens_generated": 0,
+      "code": null,
+      "inference_error": "Timeout (>300s) generating response",
+      "render_error": null
+    }
+  ]
+}

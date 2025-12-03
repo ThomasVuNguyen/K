@@ -1,8 +1,8 @@
 {
   "model_config": {
-    "hub_model_name": "ThomasTheMaker/k-1b",
+    "hub_model_name": "ThomasTheMaker/cadmonkey-1b-data-16",
     "base_model_name": "unsloth/gemma-3-1b-it-unsloth-bnb-4bit",
-    "max_seq_length": 1024,
+    "max_seq_length": 4096,
     "load_in_4bit": true,
     "load_in_8bit": false,
     "full_finetuning": false
@@ -10,14 +10,59 @@
   "dataset_config": {
     "datasets": [
       {
-        "name": "ThomasTheMaker/Synthetic-Object-v0"
+        "name": "ThomasTheMaker/Synthetic-Openscad-v0"
+      },
+      {
+        "name": "ThomasTheMaker/Synthetic-Openscad-v1"
+      },
+      {
+        "name": "ThomasTheMaker/Synthetic-Openscad-v2"
+      },
+      {
+        "name": "ThomasTheMaker/Synthetic-Openscad-v3"
+      },
+      {
+        "name": "ThomasTheMaker/Synthetic-Openscad-v4"
+      },
+      {
+        "name": "ThomasTheMaker/Synthetic-Openscad-v5"
+      },
+      {
+        "name": "ThomasTheMaker/Synthetic-Openscad-v6"
+      },
+      {
+        "name": "ThomasTheMaker/Synthetic-Openscad-v7"
+      },
+      {
+        "name": "ThomasTheMaker/Synthetic-Openscad-v8"
+      },
+      {
+        "name": "ThomasTheMaker/Synthetic-Openscad-v9"
+      },
+      {
+        "name": "ThomasTheMaker/Synthetic-Openscad-v10"
+      },
+      {
+        "name": "ThomasTheMaker/Synthetic-Openscad-v11"
+      },
+      {
+        "name": "ThomasTheMaker/Synthetic-Openscad-v12"
+      },
+      {
+        "name": "ThomasTheMaker/Synthetic-Openscad-v13"
+      },
+      {
+        "name": "ThomasTheMaker/Synthetic-Openscad-v14"
+      },
+      {
+        "name": "ThomasTheMaker/Synthetic-Openscad-v15"
       }
     ],
     "chat_template": "gemma3",
     "test_objects": ["cat", "car", "tree"]
   },
   "lora_config": {
-    "r": 32,
+    "r": 128,
     "alpha_multiplier": 2,
     "dropout": 0.05,
     "bias": "none",

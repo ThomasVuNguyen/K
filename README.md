@@ -13,3 +13,6 @@ source venv/bin/activate
 ```bash
 pip install unsloth datasets huggingface_hub
 ```
+
+3. Openscad install 
+snap install openscad-nightly

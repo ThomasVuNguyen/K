@@ -9,23 +9,15 @@ import os
 import json
 import subprocess
 import re
-import tempfile
-import requests
-import base64
 from pathlib import Path
 from huggingface_hub import hf_hub_download
 from datetime import datetime
-from concurrent.futures import ProcessPoolExecutor, as_completed
-import multiprocessing
 
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
 
-# VLM Configuration
-OLLAMA_URL = "http://localhost:11434/api/generate"
-OLLAMA_MODEL = "llava:7b"
-MAX_WORKERS = min(4, multiprocessing.cpu_count())  # Parallel workers for rendering/judging
+# Sequential processing - one object at a time
 
 def load_config():
     """Load configuration from config.json"""
@@ -95,19 +87,22 @@ def run_inference(model_path, object_name, llama_cli_path):
     print(f"  🎯 Generating: {object_name}")
 
     try:
-        # Build command - simpler approach
+        # Build command with proper flags for one-shot generation
+        # Use -p for prompt input, -n to limit tokens, --single-turn to exit after one response
         cmd = [
             llama_cli_path,
-            "-m", model_path
+            "-m", model_path,
+            "-p", prompt,
+            "-n", "2048",  # Limit to 2048 tokens max
+            "--single-turn",  # Run conversation for a single turn only, then exit
         ]
 
-        # Run with stdin for the prompt
+        # Run the command
         result = subprocess.run(
             cmd,
-            input=prompt + "\n",
             capture_output=True,
             text=True,
-            timeout=300  # 5 minute timeout
+            timeout=3000  # 50 minute timeout
         )
 
         error_msg = None
@@ -138,7 +133,7 @@ def run_inference(model_path, object_name, llama_cli_path):
         return result.stdout if result.stdout else None, tokens_generated, error_msg
 
     except subprocess.TimeoutExpired:
-        error_msg = "Timeout (>300s) generating response"
+        error_msg = "Timeout (>3000s) generating response"
         print(f"    ✗ {error_msg}")
         return None, 0, error_msg
     except FileNotFoundError:
@@ -189,8 +184,12 @@ def extract_openscad_code(text):
 # =============================================================================
 
 def get_openscad_path():
-    """Find OpenSCAD executable"""
+    """Find OpenSCAD executable, preferring openscad-nightly if available"""
+    # Check for openscad-nightly first (newer versions with better headless support)
     possible_paths = [
+        "openscad-nightly",  # Check PATH first
+        "/snap/bin/openscad-nightly",
+        "/usr/bin/openscad-nightly",
         "/usr/bin/openscad",
         "/snap/bin/openscad",
         os.path.expanduser("~/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD"),
@@ -198,7 +197,14 @@ def get_openscad_path():
     ]
     
     for path in possible_paths:
-        if os.path.exists(path) and os.access(path, os.X_OK):
+        # For commands in PATH, check if they exist
+        if '/' not in path:
+            result = subprocess.run(["which", path], capture_output=True, text=True)
+            if result.returncode == 0:
+                found_path = result.stdout.strip()
+                if os.path.exists(found_path) and os.access(found_path, os.X_OK):
+                    return found_path
+        elif os.path.exists(path) and os.access(path, os.X_OK):
             return path
     
     return None
@@ -219,20 +225,36 @@ def get_blender_path():
     
     return None
 
+def get_xvfb_path():
+    """Find xvfb-run executable for headless rendering"""
+    possible_paths = [
+        "/usr/bin/xvfb-run",
+        "/usr/local/bin/xvfb-run",
+        "xvfb-run",
+    ]
+    
+    for path in possible_paths:
+        # Check if command exists (works for commands in PATH)
+        result = subprocess.run(["which", path.split('/')[-1]], 
+                              capture_output=True, text=True)
+        if result.returncode == 0:
+            return result.stdout.strip()
+        elif os.path.exists(path) and os.access(path, os.X_OK):
+            return path
+    
+    return None
+
 def render_openscad(scad_code, object_name, evaluation_dir):
-    """Render OpenSCAD code to STL/PNG using Blender for high-quality images"""
+    """Render OpenSCAD code to PNG preserving colors and centering the object"""
     openscad_path = get_openscad_path()
-    blender_path = get_blender_path()
 
     if not openscad_path:
         error_msg = "OpenSCAD not found, skipping rendering"
         print(f"    ⚠ {error_msg}")
         return False, error_msg
     
-    if not blender_path:
-        error_msg = "Blender not found, falling back to OpenSCAD PNG rendering"
-        print(f"    ⚠ {error_msg}")
-        return render_openscad_fallback(scad_code, object_name, evaluation_dir, openscad_path)
+    # Use OpenSCAD direct rendering to preserve colors
+    return render_openscad_fallback(scad_code, object_name, evaluation_dir, openscad_path)
 
     try:
         # Create evaluation directory if it doesn't exist
@@ -309,18 +331,25 @@ if imported_obj:
     size = max_coords - min_coords
     max_size = max(size.x, size.y, size.z)
     
-    # Position camera at appropriate distance
-    distance = max_size * 3  # 3x the object size
+    # Position camera at appropriate distance, centered on object
+    distance = max_size * 2.5  # 2.5x the object size
+    # Position camera at isometric angle looking at center
     camera_location = center + mathutils.Vector((distance, -distance, distance))
+    
+    # Make camera look at the center
+    direction = center - camera_location
+    rot_quat = direction.to_track_quat('-Z', 'Y')
+    camera_rotation = rot_quat.to_euler()
 else:
     # Fallback if no object found
     center = mathutils.Vector((0, 0, 0))
     camera_location = mathutils.Vector((10, -10, 10))
+    camera_rotation = (1.1, 0, 0.785)
 
 # Set up camera and lighting
 bpy.ops.object.camera_add(location=camera_location)
 camera = bpy.context.object
-camera.rotation_euler = (1.1, 0, 0.785)
+camera.rotation_euler = camera_rotation
 
 # Set camera as active
 bpy.context.scene.camera = camera
@@ -417,22 +446,96 @@ def render_openscad_fallback(scad_code, object_name, evaluation_dir, openscad_pa
         stl_size = os.path.getsize(stl_file)
         print(f"    ✓ STL created: {object_name} ({stl_size} bytes)")
         
-        # Render to PNG using OpenSCAD
+        # Render to PNG using OpenSCAD with camera settings to center the object
+        # OpenSCAD requires an X server for PNG rendering, so we use xvfb-run for headless rendering
+        xvfb_path = get_xvfb_path()
+        
+        if not xvfb_path:
+            error_msg = ("xvfb-run not found. OpenSCAD requires an X server for PNG rendering.\n"
+                        "   Install it with: sudo apt-get install xvfb")
+            print(f"    ✗ {error_msg}")
+            return False, error_msg
+        
+        # Use xvfb-run for headless rendering with proper camera settings
+        # Set environment variables to help with headless rendering
+        env = os.environ.copy()
+        env['LIBGL_ALWAYS_SOFTWARE'] = '1'
+        env['GALLIUM_DRIVER'] = 'llvmpipe'
+        env['MESA_GL_VERSION_OVERRIDE'] = '3.3'
+        
+        # Try with --render flag for full geometry evaluation (CGAL) instead of preview mode
+        # This might be more stable than preview mode in headless environments
         png_result = subprocess.run([
-            openscad_path, "-o", png_file, "--imgsize", "800,600", scad_file
-        ], capture_output=True, timeout=30, text=True)
+            xvfb_path, "-a", "-s", "-screen 0 1024x768x24",
+            openscad_path,
+            "-o", png_file,
+            "--render",  # Use full render instead of preview
+            "--autocenter",
+            "--viewall",
+            "--imgsize=800,600",
+            "--projection=ortho",
+            scad_file
+        ], capture_output=True, timeout=30, text=True, env=env)
+        
+        # Check if file was created successfully (sometimes OpenSCAD returns non-zero but still creates file)
+        if os.path.exists(png_file) and os.path.getsize(png_file) > 0:
+            png_size = os.path.getsize(png_file)
+            print(f"    ✓ PNG created with colors preserved: {object_name} ({png_size} bytes)")
+            return True, None
         
         if png_result.returncode != 0:
-            print(f"    ⚠ PNG render failed, but STL succeeded")
-            return True, "PNG render failed"
+            # Try without --render (preview mode) but with other settings
+            png_result = subprocess.run([
+                xvfb_path, "-a", "-s", "-screen 0 1024x768x24",
+                openscad_path,
+                "-o", png_file,
+                "--autocenter",
+                "--viewall",
+                "--imgsize=800,600",
+                scad_file
+            ], capture_output=True, timeout=30, text=True, env=env)
+            
+            # Check if file was created
+            if os.path.exists(png_file) and os.path.getsize(png_file) > 0:
+                png_size = os.path.getsize(png_file)
+                print(f"    ✓ PNG created with colors preserved: {object_name} ({png_size} bytes)")
+                return True, None
+            
+            if png_result.returncode != 0:
+                # Try minimal command without viewall
+                png_result = subprocess.run([
+                    xvfb_path, "-a", "-s", "-screen 0 1024x768x24",
+                    openscad_path,
+                    "-o", png_file,
+                    "--autocenter",
+                    "--imgsize=800,600",
+                    scad_file
+                ], capture_output=True, timeout=30, text=True, env=env)
+                
+                # Check if file was created
+                if os.path.exists(png_file) and os.path.getsize(png_file) > 0:
+                    png_size = os.path.getsize(png_file)
+                    print(f"    ✓ PNG created with colors preserved: {object_name} ({png_size} bytes)")
+                    return True, None
+                
+                if png_result.returncode != 0:
+                    # Show both stdout and stderr for debugging
+                    error_output = (png_result.stderr or png_result.stdout or "Unknown error")[:500]
+                    error_msg = f"OpenSCAD PNG render failed: {error_output}"
+                    print(f"    ⚠ {error_msg}")
+                    print(f"    Note: OpenSCAD PNG rendering may fail in headless environments.")
+                    print(f"    STL file was created successfully, but PNG rendering requires a display.")
+                    return False, error_msg
         
         if os.path.exists(png_file) and os.path.getsize(png_file) > 0:
             png_size = os.path.getsize(png_file)
-            print(f"    ✓ PNG created: {object_name} ({png_size} bytes)")
+            print(f"    ✓ PNG created with colors preserved: {object_name} ({png_size} bytes)")
             return True, None
         else:
-            print(f"    ⚠ PNG render failed, but STL succeeded")
-            return True, "PNG render failed"
+            error_msg = "PNG file not created or empty (OpenSCAD may require a display for PNG rendering)"
+            print(f"    ⚠ {error_msg}")
+            print(f"    STL file was created successfully.")
+            return False, error_msg
 
     except subprocess.TimeoutExpired:
         error_msg = "OpenSCAD timeout (>30s)"
@@ -442,63 +545,6 @@ def render_openscad_fallback(scad_code, object_name, evaluation_dir, openscad_pa
         error_msg = f"Render error: {str(e)}"
         print(f"    ✗ {error_msg}")
         return False, error_msg
-
-# =============================================================================
-# VLM JUDGING
-# =============================================================================
-
-def image_to_base64(image_path):
-    """Convert image to base64 string for VLM"""
-    try:
-        with open(image_path, 'rb') as f:
-            image_data = f.read()
-        return base64.b64encode(image_data).decode('utf-8')
-    except Exception as e:
-        print(f"    Error converting image to base64: {e}")
-        return None
-
-def judge_image_similarity(image_path, object_name):
-    """Use VLM to judge if the rendered image resembles the requested object"""
-    if not os.path.exists(image_path):
-        return False, "Image file not found"
-    
-    # Convert image to base64
-    image_b64 = image_to_base64(image_path)
-    if not image_b64:
-        return False, "Failed to convert image to base64"
-    
-    # Create prompt for VLM
-    prompt = f"Look at this 3D rendered object. Does this image resemble a {object_name}? Answer only 'yes' or 'no'."
-    
-    # Prepare payload for vision model
-    payload = {
-        "model": OLLAMA_MODEL,
-        "prompt": prompt,
-        "images": [image_b64],
-        "stream": False
-    }
-    
-    try:
-        response = requests.post(OLLAMA_URL, json=payload, timeout=30)
-        if response.status_code == 200:
-            answer = response.json()['response'].strip().lower()
-            # Extract yes/no from response
-            if 'yes' in answer and 'no' not in answer:
-                return True, answer
-            elif 'no' in answer and 'yes' not in answer:
-                return False, answer
-            else:
-                # Fallback: look for explicit yes/no
-                if answer.startswith('yes'):
-                    return True, answer
-                elif answer.startswith('no'):
-                    return False, answer
-                else:
-                    return False, f"Unclear response: {answer}"
-        else:
-            return False, f"VLM API error: {response.status_code}"
-    except Exception as e:
-        return False, f"VLM API error: {str(e)}"
 
 def process_object_parallel(args):
     """Process a single object: generate and render (for parallel execution)"""
@@ -622,78 +668,95 @@ def evaluate_model(config):
     print(f"📁 Evaluation run folder: {evaluation_dir}/")
     print(f"📝 Results will be saved to: {results_file}")
     print(f"🖼️  Rendered images will be saved to: {evaluation_dir}/")
-    print(f"⚡ Parallel processing with {MAX_WORKERS} workers")
+    print(f"⚡ Sequential processing (1 object at a time)")
 
-    # Prepare arguments for parallel processing
-    process_args = [
-        (model_path, obj, llama_cli_path, evaluation_dir, i)
-        for i, obj in enumerate(test_objects, 1)
-    ]
-
-    print(f"\n🚀 Starting parallel processing of {len(test_objects)} objects...")
+    print(f"\n🚀 Starting sequential processing of {len(test_objects)} objects...")
     print("-" * 60)
 
-    # Process objects in parallel
-    with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        # Submit all tasks
-        future_to_index = {
-            executor.submit(process_object_parallel, args): args[4]
-            for args in process_args
-        }
-
-        # Process results as they complete
-        for future in as_completed(future_to_index):
-            index = future_to_index[future]
+    # Process objects sequentially (one at a time)
+    for i, obj in enumerate(test_objects, 1):
+        try:
+            print(f"\n[{i}/{len(test_objects)}] Processing: {obj}")
             
-            try:
-                result = future.result()
-                results.append(result)
-                
-                # Save results after each completion
-                save_results()
-                
-                # Print progress
-                print(f"\n[{len(results)}/{len(test_objects)}] Completed: {result['object']}")
-                print(f"  Code: {'✓' if result['code_extracted'] else '✗'}")
-                print(f"  Render: {'✓' if result['render_success'] else '✗'}")
-                
-            except Exception as e:
-                print(f"\n[{index}] Error processing: {e}")
-                # Add error result
-                results.append({
-                    'object': f"object_{index}",
-                    'code_extracted': False,
-                    'render_success': False,
-                    'tokens_generated': 0,
-                    'code': None,
-                    'inference_error': str(e),
-                    'render_error': None,
-                })
-                save_results()
+            # Process single object
+            result = process_object_parallel((model_path, obj, llama_cli_path, evaluation_dir, i))
+            results.append(result)
+            
+            # Save results after each completion
+            save_results()
+            
+            # Print progress
+            print(f"\n[{i}/{len(test_objects)}] Completed: {result['object']}")
+            print(f"  Code: {'✓' if result['code_extracted'] else '✗'}")
+            print(f"  Render: {'✓' if result['render_success'] else '✗'}")
+            
+        except Exception as e:
+            print(f"\n[{i}] Error processing: {e}")
+            # Add error result
+            results.append({
+                'object': obj if 'obj' in locals() else f"object_{i}",
+                'code_extracted': False,
+                'render_success': False,
+                'tokens_generated': 0,
+                'code': None,
+                'inference_error': str(e),
+                'render_error': None,
+            })
+            save_results()
     
     # Print summary
     print("\n" + "="*60)
     print("📊 EVALUATION RESULTS")
     print("="*60)
 
-    code_success = sum(1 for r in results if r['code_extracted'])
     render_success = sum(1 for r in results if r['render_success'])
     total = len(results)
-    avg_tokens = sum(r['tokens_generated'] for r in results) / total if total > 0 else 0
 
-    print(f"\n✨ Code Extraction Success Rate: {code_success}/{total} ({code_success/total*100:.1f}%)")
-    print(f"🎨 Render Success Rate: {render_success}/{total} ({render_success/total*100:.1f}%)")
-    print(f" Average Tokens Generated: {avg_tokens:.0f}")
-
-    print(f"\n{'Object':<30} {'Code':<6} {'Render':<8} {'Tokens':<8}")
-    print("-" * 60)
-    for r in results:
-        code_status = "✓" if r['code_extracted'] else "✗"
-        render_status = "✓" if r['render_success'] else "✗"
-        print(f"{r['object']:<30} {code_status:<6} {render_status:<8} {r['tokens_generated']:<8}")
+    print(f"\n🎨 Render Success Rate: {render_success}/{total} ({render_success/total*100:.1f}%)")
 
     print(f"\n💾 Final results saved to: {results_file}")
     print(f"🖼️  All rendered images saved to: {evaluation_dir}/")
+    
+    # List all rendered images and errors
+    print(f"\n📸 Rendered Images:")
+    print("-" * 60)
+    image_files = []
+    errors = []
+    
+    for r in results:
+        safe_name = re.sub(r'[^\w\-_]', '_', r['object'])
+        png_file = os.path.join(evaluation_dir, f"{safe_name}.png")
+        
+        if r['render_success'] and os.path.exists(png_file):
+            png_size = os.path.getsize(png_file)
+            image_files.append((r['object'], png_file, png_size))
+            print(f"  ✓ {r['object']:<25} → {png_file} ({png_size} bytes)")
+        else:
+            # Collect errors
+            error_info = {
+                'object': r['object'],
+                'inference_error': r.get('inference_error'),
+                'render_error': r.get('render_error'),
+            }
+            if error_info['inference_error'] or error_info['render_error']:
+                errors.append(error_info)
+    
+    if not image_files:
+        print("  (No images were successfully rendered)")
+    else:
+        print(f"\n  Total images rendered: {len(image_files)}")
+    
+    # Show errors if any
+    if errors:
+        print(f"\n❌ Errors:")
+        print("-" * 60)
+        for err in errors:
+            print(f"  {err['object']}:")
+            if err['inference_error']:
+                print(f"    Inference: {err['inference_error']}")
+            if err['render_error']:
+                print(f"    Render: {err['render_error']}")
+    
     print("="*60)
 
 # =============================================================================

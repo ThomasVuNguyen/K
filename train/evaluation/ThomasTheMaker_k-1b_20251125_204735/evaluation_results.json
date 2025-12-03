@@ -1,16 +1,14 @@
 {
   "model_name": "ThomasTheMaker/k-1b",
-  "timestamp": "2025-11-25T16:00:12.852590",
+  "timestamp": "2025-11-25T20:47:35.868320",
   "date": "2025-11-25",
-  "time": "16:00:12",
+  "time": "20:47:35",
   "total_tests": 3,
   "completed_tests": 0,
   "code_extraction_success": 0,
   "code_extraction_rate": "0%",
   "render_success": 0,
   "render_success_rate": "0%",
-  "visual_similarity_success": 0,
-  "visual_similarity_rate": "0%",
   "average_tokens_generated": "0",
   "results": []
 }
